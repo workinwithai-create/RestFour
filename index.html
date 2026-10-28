@@ -1,0 +1,42 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>RestFour — four-bar rest desk</title>
+  <meta name="description" content="Four live-instrument bars of intentional rest so the return lands with weight." />
+  <link rel="stylesheet" href="./styles.css" />
+</head>
+<body>
+<main>
+  <p class="eyebrow">WorkinWithAI · live chairs</p>
+  <h1>RestFour</h1>
+  <p class="lead">Four-bar rest desk. Generators keep the pocket full. Session players write four live bars of intentional rest — sparse hits, held tones, air — so the full return lands with weight. Live piano, upright, nylon, kit, trumpet, violin. Not a space for the hook slam. Not a hush to silence. Not a stop-time hole.</p>
+  <p class="status" id="status">Seating chairs…</p>
+  <div class="controls">
+    <label>BPM <input type="number" id="bpm" min="60" max="180" value="98" /></label>
+    <label>Key <select id="key"><option>A minor</option><option>C major</option><option>E major</option><option>D minor</option><option>G major</option></select></label>
+    <label>Chords <input type="text" id="chords" value="Am F C G" placeholder="Am F C G" /></label>
+  </div>
+  <p class="eyebrow">Groove</p>
+  <div class="row" id="grooves"></div>
+  <p class="eyebrow">Rest</p>
+  <div class="row" id="recipes"></div>
+  <p class="eyebrow">Form · pocket 1–8 · rest 9–12 · return 13–16</p>
+  <div class="bars" id="bars"></div>
+  <h2>Punch list</h2>
+  <pre id="punch"></pre>
+  <p class="note">Tap to start audio. On iOS the silent switch mutes Web Audio. Exports drop on the grid at sample 0.</p>
+</main>
+<div class="dock">
+  <button id="playA">A · Pocket loop</button>
+  <button id="playB">B · Full form</button>
+  <button id="play8">8 · Rest only</button>
+  <button class="ghost" id="stop">Stop</button>
+  <button class="ghost" id="copy">Copy punch</button>
+  <button class="ghost" id="exportWav">Export WAV</button>
+  <button class="ghost" id="exportMid">Export MIDI</button>
+</div>
+<script type="module" src="./app.js"></script>
+</body>
+</html>

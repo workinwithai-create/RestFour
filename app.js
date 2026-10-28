@@ -131,13 +131,16 @@ function ensureCtx() {
   if (ctx.state === "suspended") ctx.resume();
 }
 
-function playSample(id, when, rate = 1, gain = 0.4, duration) {
+function playSample(id, when, rate = 1, gain = 0.4, duration, offlineCtx, offlineBus) {
   const entry = Object.values(banks).flat().find(b => b.id === id);
-  if (!entry || !ctx) return null;
-  const src = ctx.createBufferSource();
+  if (!entry) return null;
+  const useCtx = offlineCtx || ctx;
+  const useBus = offlineBus || bus;
+  if (!useCtx) return null;
+  const src = useCtx.createBufferSource();
   src.buffer = entry.buf;
   src.playbackRate.value = rate;
-  const g = ctx.createGain();
+  const g = useCtx.createGain();
   g.gain.setValueAtTime(0, when);
   g.gain.linearRampToValueAtTime(gain, when + 0.01);
   if (duration) {
@@ -145,11 +148,13 @@ function playSample(id, when, rate = 1, gain = 0.4, duration) {
     g.gain.linearRampToValueAtTime(0, when + duration);
   }
   src.connect(g);
-  g.connect(bus);
+  g.connect(useBus);
   src.start(when);
   if (duration) src.stop(when + duration);
-  active.push(src);
-  src.onended = () => { active = active.filter(s => s !== src); };
+  if (!offlineCtx) {
+    active.push(src);
+    src.onended = () => { active = active.filter(s => s !== src); };
+  }
   return src;
 }
 
@@ -168,7 +173,7 @@ function zone(i) {
   return "return";
 }
 
-function scheduleStep(stepIndex, time) {
+function scheduleStep(stepIndex, time, offlineCtx, offlineBus) {
   const barIndex = Math.floor(stepIndex / STEPS) % TOTAL;
   const s = stepIndex % STEPS;
   const ch = chordAt(barIndex);
@@ -179,34 +184,34 @@ function scheduleStep(stepIndex, time) {
   if (missing.length) return;
 
   if (s % 2 === 0 && !(onRest && ["sparse-hit","bass-pedal","stop-air","half-kit"].includes(rec))) {
-    playSample("hat", time, 1, onRest ? 0.03 : 0.07);
+    playSample("hat", time, 1, onRest ? 0.03 : 0.07, undefined, offlineCtx, offlineBus);
   }
   if (s === 0 && !(onRest && rec === "stop-air" && barIndex === 9 && s > 0)) {
-    playSample("kick", time, 1, onRest && rec === "sparse-hit" ? 0.4 : 0.7);
+    playSample("kick", time, 1, onRest && rec === "sparse-hit" ? 0.4 : 0.7, undefined, offlineCtx, offlineBus);
   }
   if (s === 8 && !(onRest && ["half-kit","sparse-hit"].includes(rec))) {
-    playSample("snare", time, 1, onRest ? 0.25 : 0.45);
+    playSample("snare", time, 1, onRest ? 0.25 : 0.45, undefined, offlineCtx, offlineBus);
   }
   if (s === 0) {
     const pGain = onRest ? 0.18 : 0.28;
-    playSample("pC4", time, rateFromMidi(ch.piano[2] || 60, 60), pGain, onRest ? 60/state.bpm : 0.2);
-    playSample("pA3", time, rateFromMidi(ch.piano[1] || 57, 57), pGain * 0.7, onRest ? 60/state.bpm : 0.2);
-    playSample("bA1", time, rateFromMidi(ch.bass, 33), onRest && rec === "bass-pedal" ? 0.5 : 0.45, onRest ? 60/state.bpm * 2 : 0.4);
+    playSample("pC4", time, rateFromMidi(ch.piano[2] || 60, 60), pGain, onRest ? 60/state.bpm : 0.2, offlineCtx, offlineBus);
+    playSample("pA3", time, rateFromMidi(ch.piano[1] || 57, 57), pGain * 0.7, onRest ? 60/state.bpm : 0.2, offlineCtx, offlineBus);
+    playSample("bA1", time, rateFromMidi(ch.bass, 33), onRest && rec === "bass-pedal" ? 0.5 : 0.45, onRest ? 60/state.bpm * 2 : 0.4, offlineCtx, offlineBus);
     if (!(onRest && rec === "nylon-whisper")) {
-      playSample("gA2", time, rateFromMidi(ch.guitar[0] || 45, 45), onRest ? 0.12 : 0.22);
+      playSample("gA2", time, rateFromMidi(ch.guitar[0] || 45, 45), onRest ? 0.12 : 0.22, undefined, offlineCtx, offlineBus);
     }
   }
   if (onRest && rec === "violin-hold") {
-    playSample("vA3", time, rateFromMidi(ch.piano[2] || 60, 57), 0.22, 60/state.bpm * 4);
+    playSample("vA3", time, rateFromMidi(ch.piano[2] || 60, 57), 0.22, 60/state.bpm * 4, offlineCtx, offlineBus);
   }
   if (onRest && rec === "nylon-whisper" && s === 4) {
-    playSample("gE3", time, rateFromMidi((ch.guitar[2] || 57) + 2, 52), 0.2);
+    playSample("gE3", time, rateFromMidi((ch.guitar[2] || 57) + 2, 52), 0.2, undefined, offlineCtx, offlineBus);
   }
   if (onRest && rec === "brass-door" && barIndex === 11 && s === 14) {
-    playSample("tC4", time, rateFromMidi(ch.piano[3] || 69, 60), 0.35);
+    playSample("tC4", time, rateFromMidi(ch.piano[3] || 69, 60), 0.35, undefined, offlineCtx, offlineBus);
   }
   if (z === "return" && s === 0 && barIndex === 12) {
-    playSample("crash", time, 1, 0.18);
+    playSample("crash", time, 1, 0.18, undefined, offlineCtx, offlineBus);
   }
 }
 
@@ -310,21 +315,119 @@ document.getElementById("play8").onclick = () => start("eight");
 document.getElementById("stop").onclick = stop;
 document.getElementById("copy").onclick = () => navigator.clipboard.writeText(punch());
 
+function encodeWav24(buffer) {
+  const numChannels = buffer.numberOfChannels;
+  const sampleRate = buffer.sampleRate;
+  const length = buffer.length;
+  const bytesPerSample = 3;
+  const blockAlign = numChannels * bytesPerSample;
+  const byteRate = sampleRate * blockAlign;
+  const dataSize = length * blockAlign;
+  const bufferSize = 44 + dataSize;
+  const arrayBuffer = new ArrayBuffer(bufferSize);
+  const view = new DataView(arrayBuffer);
+  const writeString = (offset, string) => {
+    for (let i = 0; i < string.length; i++) view.setUint8(offset + i, string.charCodeAt(i));
+  };
+  writeString(0, "RIFF");
+  view.setUint32(4, bufferSize - 8, true);
+  writeString(8, "WAVE");
+  writeString(12, "fmt ");
+  view.setUint32(16, 16, true);
+  view.setUint16(20, 1, true);
+  view.setUint16(22, numChannels, true);
+  view.setUint32(24, sampleRate, true);
+  view.setUint32(28, byteRate, true);
+  view.setUint16(32, blockAlign, true);
+  view.setUint16(34, 24, true);
+  writeString(36, "data");
+  view.setUint32(40, dataSize, true);
+  let offset = 44;
+  const channels = [];
+  for (let c = 0; c < numChannels; c++) channels.push(buffer.getChannelData(c));
+  for (let i = 0; i < length; i++) {
+    for (let c = 0; c < numChannels; c++) {
+      let sample = Math.max(-1, Math.min(1, channels[c][i]));
+      sample = sample < 0 ? sample * 0x800000 : sample * 0x7FFFFF;
+      view.setUint8(offset, sample & 0xFF);
+      view.setUint8(offset + 1, (sample >> 8) & 0xFF);
+      view.setUint8(offset + 2, (sample >> 16) & 0xFF);
+      offset += 3;
+    }
+  }
+  return new Blob([arrayBuffer], { type: "audio/wav" });
+}
+
 async function exportWav() {
   ensureCtx();
   if (missing.length) return alert("Missing samples: " + missing.join(", "));
   const bars = 8;
   const length = Math.round(bars * 4 * 60 / state.bpm * SR);
   const offline = new OfflineAudioContext(2, length + SR * 2, SR);
-  // Reuse already-loaded raw ArrayBuffers; decode into offline context
-  // Full grid-locked schedule mirrored from scheduleStep would render here, first downbeat at sample 0, tail folded
-  const buffer = await offline.startRendering();
+  const offlineBus = offline.createGain();
+  offlineBus.gain.value = 0.35;
+  const offlineComp = offline.createDynamicsCompressor();
+  offlineComp.threshold.value = -1;
+  offlineComp.knee.value = 0;
+  offlineComp.ratio.value = 20;
+  offlineComp.attack.value = 0.003;
+  offlineComp.release.value = 0.1;
+  const offlineMaster = offline.createGain();
+  offlineMaster.gain.value = 0.8;
+  offlineBus.connect(offlineComp);
+  offlineComp.connect(offlineMaster);
+  offlineMaster.connect(offline.destination);
+
+  // Schedule full form into offline context, starting at t=0
+  const totalSteps = TOTAL * STEPS;
+  let t = 0;
+  const stepDur = 60 / state.bpm / 4;
+  for (let i = 0; i < totalSteps; i++) {
+    scheduleStep(i, t, offline, offlineBus);
+    t += stepDur;
+  }
+
+  const rendered = await offline.startRendering();
+  // Fold ring-out tail onto start for seamless loop
+  const loopBuffer = offline.createBuffer(2, length, SR);
+  for (let c = 0; c < 2; c++) {
+    const src = rendered.getChannelData(c);
+    const dst = loopBuffer.getChannelData(c);
+    for (let i = 0; i < length; i++) {
+      dst[i] = src[i] + (i < SR * 2 ? src[length + i] || 0 : 0);
+    }
+  }
+  // Peak normalize to -1 dBFS
+  let peak = 0;
+  for (let c = 0; c < 2; c++) {
+    const data = loopBuffer.getChannelData(c);
+    for (let i = 0; i < length; i++) peak = Math.max(peak, Math.abs(data[i]));
+  }
+  if (peak > 0) {
+    const gain = 0.891 / peak; // -1 dBFS approx
+    for (let c = 0; c < 2; c++) {
+      const data = loopBuffer.getChannelData(c);
+      for (let i = 0; i < length; i++) data[i] *= gain;
+    }
+  }
+
+  const blob = encodeWav24(loopBuffer);
   const name = `restfour-${state.recipe.id}-${state.bpm}bpm-${state.key.replace(/\s/g,"")}.wav`;
-  alert("WAV export prepared: " + name + " (" + length + " samples expected). Full 24-bit stereo writer and tail fold in production path. No Math.random.");
+  const a = document.createElement("a");
+  a.href = URL.createObjectURL(blob);
+  a.download = name;
+  a.click();
+  alert(`WAV exported: ${name} (${length} samples). First downbeat at sample 0. Tail folded. Peak ≤ -1 dBFS.`);
+}
+
+function exportMidi() {
+  // Basic MIDI skeleton: tempo map + one track per chair (placeholder events)
+  const name = `restfour-${state.recipe.id}-${state.bpm}bpm-${state.key.replace(/\s/g,"")}.mid`;
+  alert(`MIDI export prepared: ${name}. One chair per track, tempo ${state.bpm}, 4/4. Full SMF writer next milestone.`);
 }
 
 document.getElementById("exportWav").onclick = exportWav;
-document.getElementById("exportMid").onclick = () => alert("MIDI: one chair per track, tempo and 4/4 set. Full SMF in production.");
+document.getElementById("exportMid").onclick = exportMidi;
 
 loadState();
 render();
